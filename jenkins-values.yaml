@@ -1,0 +1,21 @@
+# jenkins-values.yaml
+controller:
+  componentName: "jenkins-controller"
+  image: "jenkins/jenkins"
+  tag: "lts-jdk17"
+  
+  # Automates your Persistent Storage (Replaces your old manifest)
+  persistence:
+    enabled: true
+    storageClass: "gp3"
+    size: "10Gi"
+  
+  # Automates your AWS Ingress routing (Replaces your old ingress file)
+  ingress:
+    enabled: true
+    apiVersion: "networking.k8s.io/v1"
+    annotations:
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+    hostName: "jenkins.vosukula.online"

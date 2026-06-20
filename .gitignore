@@ -1,0 +1,13 @@
+# Ignore local Terraform directory and cache folders
+**/.terraform/
+**/.terraform.lock.hcl
+
+# Ignore local variable assignment files containing keys/secrets
+**/*.tfvars
+!**/prod.tfvars
+!**/dev.tfvars
+
+# Ignore crash logs and state files if generated locally by mistake
+*.tfstate
+*.tfstate.*
+crash.log
