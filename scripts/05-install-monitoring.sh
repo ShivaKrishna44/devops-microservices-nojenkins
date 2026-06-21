@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+source ./scripts/config.sh
 
 ./helm.exe repo add prometheus-community \
   https://prometheus-community.github.io/helm-charts

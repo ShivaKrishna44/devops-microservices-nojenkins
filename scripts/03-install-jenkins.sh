@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+source ./scripts/config.sh
+
 echo "========================================="
 echo "Installing Jenkins"
 echo "========================================="
@@ -15,7 +17,7 @@ echo "========================================="
 ./helm.exe upgrade --install jenkins \
   jenkins/jenkins \
   -n jenkins \
-  -f Terraform/jenkins-values.yaml
+  -f kubernetes/jenkins/jenkins-values.yaml
 
 echo "========================================="
 echo "Jenkins Pods"

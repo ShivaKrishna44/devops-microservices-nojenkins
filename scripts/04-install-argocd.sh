@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+source ./scripts/config.sh
 
 # FIX: Swapped out 'kubectl' for your local './kubectl.exe' runner binary
 ./kubectl.exe create namespace argocd \

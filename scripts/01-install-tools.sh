@@ -1,8 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-REGION="us-east-1"
-CLUSTER_NAME="expense-dev"
+source ./scripts/config.sh
 
 echo "========================================="
 echo "🚀 Installing Helm"
@@ -27,8 +26,8 @@ echo "========================================="
 echo "Updating kubeconfig"
 echo "========================================="
 
-aws eks update-kubeconfig 
---region $REGION 
+aws eks update-kubeconfig  \
+--region $REGION \
 --name $CLUSTER_NAME
 
 echo "========================================="
@@ -37,5 +36,4 @@ echo "========================================="
 
 ./kubectl.exe get nodes
 
-
-echo"  Helm install ----  kubenret config --- Cluster Validation ### "
+# echo"  Helm install ----  kubernet config --- Cluster Validation ### "

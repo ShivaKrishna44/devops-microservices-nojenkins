@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+source ./scripts/config.sh
+
 CLUSTER_NAME="expense-dev"
 
 echo "========================================="
