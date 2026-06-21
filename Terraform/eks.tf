@@ -19,6 +19,24 @@ module "eks" {
 
   eks_managed_node_groups = local.eks_managed_node_groups
 
+  # This is AWS user/role -> EKS CLuster Acess ####
+
+  access_entries = {
+    root_admin = {
+      principal_arn = "arn:aws:iam::589389425618:root"
+
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+
   # Override node group IAM role
   create_node_security_group = true
   node_security_group_additional_rules = {
@@ -36,3 +54,4 @@ module "eks" {
     Name = var.cluster_name
   })
 }
+
