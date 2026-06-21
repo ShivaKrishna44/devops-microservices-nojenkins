@@ -57,15 +57,14 @@ pipeline {
             }
         }
 
-    stage('Debug Workspace') {
-          steps {
-             sh '''
-             pwd
-             ls -R
-            '''
-          }
-    }
-}
+        stage('Debug Workspace') {
+            steps {
+                sh '''
+                pwd
+                ls -R
+                '''
+            }
+        } // <-- Fixed: Closed ONLY the stage block, leaving global stages open.
         
         stage('Build & Test') {
             parallel {
@@ -175,13 +174,13 @@ pipeline {
                 }
             }
         }
-    }
+    } // <-- Global stages block properly closes here
     
     post {
         always {
             echo '🏁 Pipeline execution completed.'
             deleteDir()
-                    }
+        }
         success {
             script {
                 echo "✅ SUCCESS: ${env.SERVICE_NAME} deployed with tag: ${env.IMAGE_TAG}"
@@ -192,3 +191,4 @@ pipeline {
             echo "❌ Pipeline failed for ${env.SERVICE_NAME}! Check logs for details."
         }
     }
+}
