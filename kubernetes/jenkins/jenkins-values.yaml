@@ -1,0 +1,18 @@
+controller:
+  admin:
+    username: admin
+    password: admin123
+
+  serviceType: ClusterIP
+
+  installPlugins:
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - docker-workflow
+    - configuration-as-code
+
+persistence:
+  enabled: true
+  storageClass: gp2
+  size: 10Gi

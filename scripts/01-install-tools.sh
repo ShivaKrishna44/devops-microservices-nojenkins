@@ -36,4 +36,4 @@ echo "========================================="
 
 ./kubectl.exe get nodes
 
-# echo"  Helm install ----  kubernet config --- Cluster Validation ### "
+echo " ###### Helm install ----  kubernet config --- Cluster Validation done ###### "
