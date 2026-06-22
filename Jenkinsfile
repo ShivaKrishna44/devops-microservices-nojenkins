@@ -1,6 +1,6 @@
 pipeline {
     agent {
-    label 'devops-agent'
+    label 'AGENT'
     }
     
     parameters {
