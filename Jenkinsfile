@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'ec2' }
+    agent { label 'devops-agent' }
 
     stages {
         stage('Test') {
