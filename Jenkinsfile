@@ -1,19 +1,22 @@
 pipeline {
-    agent { label 'AGENT1' }
+    agent {
+        label 'devops-agent'
+    }
+
     stages {
-        stage('Build') {
+        stage('Initialize') {
             steps {
-                echo 'Hello this is build'
-            }
-        }  
-        stage('Test') {
-            steps {
-                echo 'Hello this is test'
+                echo 'Checking out code and verifying environment...'
+                sh 'git --version'
+                sh 'docker --version'
+                sh 'aws --version'
             }
         }
-      stage('Deploy') {
+        
+        stage('Build Image') {
             steps {
-                echo 'Hello this is deploy'
+                echo 'Building your service docker image...'
+                // Add your build steps here
             }
         }
     }
