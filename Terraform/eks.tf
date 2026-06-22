@@ -37,26 +37,30 @@ module "eks" {
   # Step 2: Configure AWS user/role access to EKS cluster
   # This gives specific AWS accounts admin access to the cluster
   access_entries = {
-    root_admin = {
-      # ARN of AWS account root user (replace with your account ID)
-      principal_arn = "arn:aws:iam::589389425618:root"
-
-      # Grant admin policy to this user/role
-      policy_associations = {
-        admin = {
-          # AWS managed policy for cluster admin access
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-
-          # Scope: cluster-wide access (not namespace-specific)
-          access_scope = {
-            type = "cluster"
-          }
+  root_admin = {
+    principal_arn = "arn:aws:iam::589389425618:root"
+    policy_associations = {
+      admin = {
+        policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+        access_scope = {
+          type = "cluster"
         }
       }
     }
-    # You can add more entries here for different users/roles:
-    # developer = { principal_arn = "arn:aws:iam::account:user/dev-user", ... }
   }
+
+  terraform_admin = {
+    principal_arn = "arn:aws:iam::589389425618:user/terraform-admin"
+    policy_associations = {
+      admin = {
+        policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+        access_scope = {
+          type = "cluster"
+        }
+      }
+    }
+  }
+}
 
   # Step 3: Configure security groups for worker nodes
   create_node_security_group = true
