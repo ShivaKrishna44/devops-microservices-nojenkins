@@ -9,13 +9,30 @@ source ./scripts/config.sh
 ./kubectl.exe create namespace monitoring \
   --dry-run=client -o yaml | ./kubectl.exe apply -f -
 
-# FIX: Integrated parameters into a single continuous block without a missing file block
+# Create the Grafana admin secret (idempotent — skips if it already exists)
+if ! ./kubectl.exe get secret grafana-admin-secret -n monitoring &>/dev/null; then
+  echo "Creating grafana-admin-secret..."
+  # Replace the password value below before running, or inject via CI/CD env var
+  GRAFANA_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-changeme}"
+  ./kubectl.exe create secret generic grafana-admin-secret \
+    --from-literal=admin-user=admin \
+    --from-literal=admin-password="${GRAFANA_PASSWORD}" \
+    -n monitoring
+  echo "grafana-admin-secret created."
+else
+  echo "grafana-admin-secret already exists, skipping."
+fi
+
+# Install / upgrade kube-prometheus-stack
 ./helm.exe upgrade --install monitoring \
   prometheus-community/kube-prometheus-stack \
-  -n monitoring
+  --version 65.1.1 \
+  -n monitoring \
+  -f kubernetes/monitoring/grafana-values.yaml \
+  --wait --timeout 10m
 
-echo "Waiting for monitoring stack..."
-sleep 15
+echo "Waiting for Grafana deployment to be ready..."
+./kubectl.exe rollout status deployment/monitoring-grafana -n monitoring --timeout=300s
 
 ./kubectl.exe get pods -n monitoring
 echo " ✔ Prometheus ✔ Grafana ✔ Alertmanager "

@@ -142,3 +142,12 @@ variable "database_subnet_cidrs" {
   ]
   # Database subnets are most isolated - no internet access, only internal communication
 }
+
+# Step 14: Define allowed CIDRs for EKS public API endpoint access
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "List of CIDR blocks that can access the EKS cluster public API endpoint"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+  # Restrict this to known office/VPN CIDRs in production for better security
+  # Example: ["203.0.113.0/24", "198.51.100.0/24"]
+}

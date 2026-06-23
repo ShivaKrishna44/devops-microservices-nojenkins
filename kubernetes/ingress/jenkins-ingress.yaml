@@ -7,10 +7,13 @@ metadata:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "REPLACE_WITH_ACM_CERT_ARN"
     alb.ingress.kubernetes.io/healthcheck-path: /login
     alb.ingress.kubernetes.io/backend-protocol: HTTP
 spec:
+  ingressClassName: alb
   rules:
   - host: jenkins.vosukula.online
     http:
@@ -22,3 +25,10 @@ spec:
             name: jenkins
             port:
               number: 8080
+
+#One manual step required before deploying: 
+#Replace REPLACE_WITH_ACM_CERT_ARN in jenkins-ingress.yaml, 
+#argocd-ingress.yaml, and grafana-ingress.yaml with your actual 
+#AWS ACM certificate ARN. Also create the jenkins-admin-secret and 
+#grafana-admin-secret Kubernetes secrets before running 
+#the install scripts.

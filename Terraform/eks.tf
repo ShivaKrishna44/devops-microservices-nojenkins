@@ -16,8 +16,9 @@ module "eks" {
   cluster_version = var.eks_version  # Kubernetes version: "1.33"
 
   # Network access configuration
-  # Allow public access to cluster API endpoint (can be restricted later)
-  cluster_endpoint_public_access = true
+  # Allow public access to cluster API endpoint
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
   # Security: Give cluster creator admin permissions automatically
   # This allows the person running terraform to manage the cluster
@@ -38,7 +39,7 @@ module "eks" {
   # This gives specific AWS accounts admin access to the cluster
   access_entries = {
   root_admin = {
-    principal_arn = "arn:aws:iam::589389425618:root"
+    principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
     policy_associations = {
       admin = {
         policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
@@ -50,7 +51,7 @@ module "eks" {
   }
 
   terraform_admin = {
-    principal_arn = "arn:aws:iam::589389425618:user/terraform-admin"
+    principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/terraform-admin"
     policy_associations = {
       admin = {
         policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"

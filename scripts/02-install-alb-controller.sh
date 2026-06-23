@@ -3,8 +3,6 @@ set -euo pipefail
 
 source ./scripts/config.sh
 
-CLUSTER_NAME="expense-dev"
-
 echo "========================================="
 echo "Installing AWS Load Balancer Controller"
 echo "========================================="
@@ -19,10 +17,10 @@ echo "========================================="
   --set clusterName=$CLUSTER_NAME \
   --set serviceAccount.create=true \
   --set serviceAccount.name=aws-load-balancer-controller \
-  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::589389425618:role/expense-dev-alb-controller-role
+  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::$AWS_ACCOUNT_ID:role/expense-dev-alb-controller-role
 
 echo "Waiting for controller..."
-sleep 20
+./kubectl.exe rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=120s
 
 # FIX: Fixed line-break syntax for the pod lookup
 ./kubectl.exe get pods \

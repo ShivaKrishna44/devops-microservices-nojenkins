@@ -19,7 +19,14 @@ echo "========================================="
 ./helm.exe upgrade --install jenkins \
   jenkins/jenkins \
   -n jenkins \
+  --wait --timeout 5m \
   -f kubernetes/jenkins/jenkins-values.yaml
+
+# Wait for Jenkins to be ready
+echo "========================================="
+echo "Waiting for Jenkins to be ready..."
+echo "========================================="
+kubectl rollout status deployment/jenkins -n jenkins --timeout=120s
 
 # Apply Jenkins Ingress
 echo "========================================="
@@ -45,12 +52,9 @@ echo "========================================="
 echo "========================================="
 echo "Waiting for ALB to be created..."
 echo "========================================="
-sleep 30
 ./kubectl.exe describe ingress jenkins-ingress -n jenkins
 
 echo "========================================="
 echo "Jenkins Setup Complete!"
 echo "Access Jenkins at: https://jenkins.vosukula.online"
-echo "Username: admin"
-echo "Password: admin123"
 echo "========================================="

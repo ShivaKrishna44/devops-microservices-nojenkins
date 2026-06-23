@@ -1,0 +1,156 @@
+# kube-prometheus-stack Helm values
+# Chart version: 65.1.1
+# https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+
+# ─────────────────────────────────────────────
+# Grafana
+# ─────────────────────────────────────────────
+grafana:
+  enabled: true
+
+  # Use an existing k8s Secret for the admin password.
+  # kubectl create secret generic grafana-admin-secret \
+  #   --from-literal=admin-user=admin \
+  #   --from-literal=admin-password=<your-password> \
+  #   -n monitoring
+  admin:
+    existingSecret: grafana-admin-secret
+    userKey: admin-user
+    passwordKey: admin-password
+
+  persistence:
+    enabled: true
+    storageClassName: gp2
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+
+  # Grafana ingress is managed separately via kubernetes/ingress/grafana-ingress.yaml
+  # to keep it consistent with the other ALB ingresses in this project.
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  grafana.ini:
+    server:
+      domain: grafana.vosukula.online
+      root_url: "https://grafana.vosukula.online"
+      serve_from_sub_path: false
+    analytics:
+      check_for_updates: false
+    auth.anonymous:
+      enabled: false
+    log:
+      mode: console
+      level: info
+    security:
+      allow_embedding: false
+
+# ─────────────────────────────────────────────
+# Prometheus
+# ─────────────────────────────────────────────
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    retention: 15d
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+# ─────────────────────────────────────────────
+# Alertmanager
+# ─────────────────────────────────────────────
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by:
+        - alertname
+        - namespace
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "null"
+    receivers:
+      - name: "null"
+    inhibit_rules: []
+
+# ─────────────────────────────────────────────
+# Prometheus Operator
+# ─────────────────────────────────────────────
+prometheusOperator:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ─────────────────────────────────────────────
+# Component toggles
+# ─────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+kubeApiServer:
+  enabled: true
+
+kubelet:
+  enabled: true
+
+kubeControllerManager:
+  enabled: false   # not accessible on EKS managed control plane
+
+kubeScheduler:
+  enabled: false   # not accessible on EKS managed control plane
+
+kubeEtcd:
+  enabled: false   # not accessible on EKS managed control plane
+
+coreDns:
+  enabled: true

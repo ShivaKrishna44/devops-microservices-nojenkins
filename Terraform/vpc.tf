@@ -8,7 +8,7 @@
 module "vpc" {
   # Source: Git repository containing the VPC module code
   # This is a reusable module that creates VPC, subnets, gateways, etc.
-  source = "git::https://github.com/ShivaKrishna44/terraform-aws-vpc.git?ref=main"
+  source = "git::https://github.com/ShivaKrishna44/terraform-aws-vpc.git?ref=v3.0.0"
 
   # Pass our variables to the VPC module
   # These tell the module how to configure our specific VPC
