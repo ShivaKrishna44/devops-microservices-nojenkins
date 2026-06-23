@@ -115,9 +115,6 @@ resource "aws_iam_policy" "alb_controller" {
   name        = "${var.project_name}-${var.environment}-alb-controller-policy"
   description = "Custom IAM Policy for AWS Load Balancer Controller"
   # This reads the policy from a JSON file in the policies/ folder
-  # create a file mkdir -p policies and run curl -o policies/aws-load-balancer-controller.json \
-  # https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-  # .json file creates automatically.
   policy = file("${path.module}/policies/aws-load-balancer-controller.json")
 
   # Add tags for identification and management

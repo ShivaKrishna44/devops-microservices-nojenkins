@@ -18,10 +18,15 @@ module "eks" {
   # Network access configuration
   # Allow public access to cluster API endpoint
   cluster_endpoint_public_access       = true
+  # FIX: Added CIDR restriction variable — default is 0.0.0.0/0, restrict in prod
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
   # Security: Give cluster creator admin permissions automatically
   # This allows the person running terraform to manage the cluster
+  # NOTE: enable_cluster_creator_admin_permissions already creates an access entry
+  # for the caller identity. Setting it to true AND defining the same principal
+  # in access_entries causes a 409 conflict on re-apply.
+  # Keep this true and remove root_admin from access_entries below.
   enable_cluster_creator_admin_permissions = true
 
   # Authentication mode: Use both API and ConfigMap for backwards compatibility
@@ -36,32 +41,22 @@ module "eks" {
   eks_managed_node_groups = local.eks_managed_node_groups # Defined in local.tf
 
   # Step 2: Configure AWS user/role access to EKS cluster
-  # This gives specific AWS accounts admin access to the cluster
+  # FIX: Removed root_admin entry — it conflicts with enable_cluster_creator_admin_permissions=true
+  # which already creates an access entry for the caller (root/terraform runner).
+  # Only keeping terraform_admin as a separate explicit entry.
   access_entries = {
-  root_admin = {
-    principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-    policy_associations = {
-      admin = {
-        policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-        access_scope = {
-          type = "cluster"
+    terraform_admin = {
+      principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/terraform-admin"
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
         }
       }
     }
   }
-
-  terraform_admin = {
-    principal_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/terraform-admin"
-    policy_associations = {
-      admin = {
-        policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-        access_scope = {
-          type = "cluster"
-        }
-      }
-    }
-  }
-}
 
   # Step 3: Configure security groups for worker nodes
   create_node_security_group = true

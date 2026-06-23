@@ -2,6 +2,7 @@
 # ECR (Elastic Container Registry) REPOSITORIES
 # ==========================================
 # Stores Docker images for each microservice
+# FIX: Added image_tag_mutability=IMMUTABLE, scan_on_push, lifecycle policies
 
 locals {
   ecr_lifecycle_policy = jsonencode({

@@ -210,6 +210,7 @@ Rollout
 kubectl rollout status deployment/order-service
 Restart
 kubectl rollout restart deployment/order-service
+
 16. Service Debugging
 Services
 kubectl get svc -A
@@ -243,12 +244,9 @@ Means:
 
 IAM Policy Missing
 18. Ingress Debugging
-List
-kubectl get ingress -A
-Describe
-kubectl describe ingress \
--n jenkins \
-jenkins-ingress
+19. 
+List - kubectl get ingress -A
+Describe - kubectl describe ingress -n jenkins jenkins-ingress
 
 Common Errors:
 

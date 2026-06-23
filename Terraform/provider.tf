@@ -18,10 +18,12 @@ terraform {
       # Version: Use AWS provider version 6.0 or compatible newer versions
       # The ~> means "pessimistic constraint" - allows 6.1, 6.2, etc. but not 7.0
       # Updated to match installed binary 6.51.0
-      version = "~> 6.0"
+      version = "~> 5.95"
     }
   }
 }
+
+
 
 # Step 3: Configure the AWS provider settings
 provider "aws" {
