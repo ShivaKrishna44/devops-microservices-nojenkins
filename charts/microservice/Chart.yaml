@@ -1,0 +1,6 @@
+apiVersion: v2
+name: microservice
+description: Generic Helm chart for Flask microservices on EKS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

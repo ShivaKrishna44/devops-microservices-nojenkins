@@ -1,0 +1,32 @@
+replicaCount: 2
+
+image:
+  repository: 589389425618.dkr.ecr.us-east-1.amazonaws.com/order-service
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 5000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilization: 70
+
+healthCheck:
+  path: /
+  port: 5000
+
+rollout:
+  enabled: false
+  strategy: canary
