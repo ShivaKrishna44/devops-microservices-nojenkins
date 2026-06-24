@@ -512,3 +512,79 @@ kubectl argo rollouts abort order-service -n order-service
 ./kubectl.exe get all -n sonarqube
 ./kubectl.exe get all -n argo-rollouts
 ```
+
+---
+
+## Step 9 — SonarQube Setup & Integration
+
+### 9a. Access SonarQube
+- URL: `https://sonar.vosukula.online`
+- Default login: `admin` / `admin` (forced password change on first login)
+
+### 9b. Create Project Token in SonarQube
+1. Login → click avatar (top right) → **My Account**
+2. Go to **Security** tab
+3. Generate Token → name: `jenkins-sonar-token` → type: `Global Analysis Token`
+4. Copy the token (shown only once)
+
+### 9c. Install SonarQube Scanner Plugin in Jenkins
+1. Jenkins → Manage Jenkins → **Plugins** → **Available plugins**
+2. Search: `SonarQube Scanner`
+3. Install it → restart Jenkins if prompted
+
+### 9d. Add SonarQube Token to Jenkins Credentials
+1. Manage Jenkins → Credentials → System → Global → Add Credentials
+2. Kind: **Secret text**
+3. Secret: paste the SonarQube token
+4. ID: `sonar-token`
+5. Description: `SonarQube Token`
+
+### 9e. Configure SonarQube Server in Jenkins
+⚠️ This option only appears AFTER installing the SonarQube Scanner plugin (step 9c)
+
+1. Manage Jenkins → **System** → scroll to **SonarQube servers**
+2. Check ✅ "Environment variables"
+3. Click **"Add SonarQube"**
+4. Name: `SonarQube`
+5. Server URL: `https://sonar.vosukula.online`
+6. Server authentication token: select `sonar-token` from dropdown
+7. Save
+
+### 9f. Install sonar-scanner on Jenkins Agent EC2
+```bash
+ssh -i /c/Devops/dev-ops-key.pem ec2-user@<agent-ip>
+
+curl -fLO https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+unzip sonar-scanner-cli-5.0.1.3006-linux.zip
+sudo mv sonar-scanner-5.0.1.3006-linux /opt/sonar-scanner
+sudo ln -s /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner
+sonar-scanner --version
+```
+
+### 9g. Test Manual Scan
+```bash
+cd ~/jenkins-agent/workspace/devops-microservices-pipeline/app/order-service
+
+sonar-scanner \
+  -Dsonar.projectKey=order-service \
+  -Dsonar.sources=. \
+  -Dsonar.host.url=https://sonar.vosukula.online \
+  -Dsonar.token=<YOUR_TOKEN>
+```
+
+Check results at: `https://sonar.vosukula.online/projects`
+
+### 9h. Automated SonarQube in Jenkinsfile
+Once manual scan works, add this stage to Jenkinsfile (between Build & Docker stages):
+```groovy
+stage('SonarQube Analysis') {
+    when { expression { !params.SKIP_SONAR } }
+    steps {
+        dir("app/${env.SERVICE_NAME}") {
+            withSonarQubeEnv('SonarQube') {
+                sh 'sonar-scanner -Dsonar.projectKey=${SERVICE_NAME}'
+            }
+        }
+    }
+}
+```
