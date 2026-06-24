@@ -8,11 +8,69 @@ A step-by-step guide to deploy the full platform from scratch.
 
 | # | Document | Covers | When to Read |
 |---|---|---|---|
-| 1 | **DEPLOYMENT-GUIDE.md** (this file) | Steps 1–8: Infrastructure → Jenkins → ArgoCD → Monitoring → Agent → Pipeline | First — sets up the entire platform |
-| 2 | **PHASES-IMPLEMENTATION.md** | Phases 1–5: SonarQube → Helm Charts → ArgoCD GitOps → Monitoring → Canary/Blue-Green | After base platform is running — adds advanced capabilities |
+| 1 | **DEPLOYMENT-GUIDE.md** (this file) | Steps 1–9: Infrastructure → Jenkins → ArgoCD → Monitoring → Agent → Pipeline → SonarQube | First — sets up the entire platform |
+| 2 | **PHASES-IMPLEMENTATION.md** | Advanced details: Helm Charts, ArgoCD GitOps flow, Canary/Blue-Green Rollouts | After base platform is running — deep-dive into each phase |
 | 3 | **TROUBLESHOOTING.md** | Every error encountered and how it was fixed | Reference when something breaks |
 
-**Reading order:** Start with this file (DEPLOYMENT-GUIDE), follow Steps 1–8 to get the platform running. Then move to PHASES-IMPLEMENTATION for advanced features.
+**Reading order:** Start with this file (DEPLOYMENT-GUIDE), follow Steps 1–9 to get the platform running end-to-end.
+
+---
+
+## 🚀 Quick Start — Full Platform in Order
+
+Run these steps **sequentially**. Each step depends on the previous one.
+
+```
+Step 1: Terraform (EKS + VPC + ECR + IAM)         ← 15 min
+Step 2: Tools (Helm + kubectl + kubeconfig)        ← 2 min
+Step 3: ALB Controller                             ← 3 min
+Step 4: Jenkins on EKS                             ← 5 min
+Step 5: ArgoCD                                     ← 3 min
+Step 6: Monitoring (Prometheus + Grafana)          ← 5 min
+Step 7: Connect Jenkins Agent EC2                  ← 5 min
+Step 8: Configure Pipeline + First Build           ← 5 min
+Step 9: SonarQube                                  ← 10 min
+```
+
+**Total time from zero to working platform: ~50 minutes**
+
+---
+
+## 🛑 Teardown — Destroy Everything (in reverse order)
+
+When you're done and want to stop costs, run these in **reverse order**:
+
+```bash
+# Step 1: Delete ArgoCD apps (stops deployments)
+./kubectl.exe delete -f kubernetes/argocd/apps/
+
+# Step 2: Uninstall Helm releases
+./helm.exe uninstall sonarqube -n sonarqube
+./helm.exe uninstall monitoring -n monitoring
+./helm.exe uninstall jenkins -n jenkins
+
+# Step 3: Delete Argo Rollouts
+./kubectl.exe delete -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml -n argo-rollouts
+
+# Step 4: Delete ArgoCD
+./kubectl.exe delete -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# Step 5: Delete ALB controller
+./helm.exe uninstall aws-load-balancer-controller -n kube-system
+
+# Step 6: Delete all namespaces (cleans up remaining resources)
+./kubectl.exe delete namespace sonarqube monitoring jenkins argocd argo-rollouts order-service payment-service user-service
+
+# Step 7: Destroy Terraform infrastructure (EKS + VPC + ECR)
+cd Terraform
+terraform destroy -var-file=tfvars/dev/dev.tfvars
+
+# Step 8: Destroy Jenkins EC2 instances (cicd-tools repo)
+cd ../../../cicd-tools
+terraform destroy
+```
+
+⚠️ `terraform destroy` deletes everything permanently — EKS cluster, VPC, ECR images, IAM roles. Only run when you're completely done.
 
 ---
 

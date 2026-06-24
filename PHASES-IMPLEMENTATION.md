@@ -8,11 +8,40 @@ Complete step-by-step guide for implementing all 5 advanced phases on top of the
 
 | # | Document | Covers | When to Read |
 |---|---|---|---|
-| 1 | **DEPLOYMENT-GUIDE.md** | Steps 1–8: Infrastructure → Jenkins → ArgoCD → Monitoring → Agent → Pipeline | First — sets up the entire platform |
-| 2 | **PHASES-IMPLEMENTATION.md** (this file) | Phases 1–5: SonarQube → Helm Charts → ArgoCD GitOps → Monitoring details → Canary/Blue-Green | After base platform is running |
+| 1 | **DEPLOYMENT-GUIDE.md** | Steps 1–9: Full platform setup (Terraform → Jenkins → ArgoCD → Monitoring → SonarQube) | First — gets everything running |
+| 2 | **PHASES-IMPLEMENTATION.md** (this file) | Deep-dive into Helm Charts, ArgoCD GitOps flow, Canary/Blue-Green deployments | After base platform is running |
 | 3 | **TROUBLESHOOTING.md** | Every error encountered and how it was fixed | Reference when something breaks |
 
 **Prerequisite:** Complete all steps in DEPLOYMENT-GUIDE.md first. This document builds on top of that foundation.
+
+## 🚀 Phase Execution Order
+
+| Phase | What | Install Command | Verify |
+|---|---|---|---|
+| 4 | Monitoring | `bash scripts/05-install-monitoring.sh` | `kubectl get pods -n monitoring` |
+| 2 | Helm Charts | `helm upgrade --install <svc> ./charts/microservice -f charts/microservice/values-<svc>.yaml -n <svc> --create-namespace` | `kubectl get pods -n <svc>` |
+| 3 | ArgoCD GitOps | `kubectl apply -f kubernetes/argocd/apps/` | ArgoCD UI → Applications |
+| 1 | SonarQube | `bash scripts/06-install-sonarqube.sh` | `https://sonar.vosukula.online` |
+| 5 | Argo Rollouts | `bash scripts/07-install-argo-rollouts.sh` | `kubectl get pods -n argo-rollouts` |
+
+## 🛑 Phase Teardown (Reverse Order)
+
+```bash
+# Remove Argo Rollouts
+./kubectl.exe delete -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+./kubectl.exe delete namespace argo-rollouts
+
+# Remove SonarQube
+./helm.exe uninstall sonarqube -n sonarqube
+./kubectl.exe delete namespace sonarqube
+
+# Remove ArgoCD Apps (keeps ArgoCD itself running)
+./kubectl.exe delete -f kubernetes/argocd/apps/
+
+# Remove Monitoring
+./helm.exe uninstall monitoring -n monitoring
+./kubectl.exe delete namespace monitoring
+```
 
 ---
 
