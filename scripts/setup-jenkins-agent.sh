@@ -41,6 +41,9 @@ curl -fLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
 chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 
+# Ensure /usr/local/bin is in PATH
+export PATH=$PATH:/usr/local/bin
+
 kubectl version --client
 
 echo
@@ -134,3 +137,16 @@ echo
 echo "========================================="
 echo "Agent Setup Completed"
 echo "========================================="
+
+echo
+echo "========================================="
+echo "11. Cleanup (Free Disk Space)"
+echo "========================================="
+
+# Remove unused Docker images/containers to free disk space
+# Jenkins marks agent offline when disk < 1GB
+docker system prune -af || true
+sudo dnf clean all || true
+
+echo "Disk space after cleanup:"
+df -h /home
