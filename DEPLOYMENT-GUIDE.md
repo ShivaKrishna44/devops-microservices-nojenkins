@@ -213,6 +213,10 @@ Update Route53 CNAME for `jenkins.vosukula.online` to point to the ALB address s
 **Username:** `admin`  
 **Password:** whatever you set in step 4a
 
+> ⚠️ **Note:** Jenkins Agent setup comes in **Step 7** — do NOT try to connect an agent yet. Continue with ArgoCD and Monitoring first. Jenkins needs to be fully running with ingress/URL working before the agent can connect to it.
+
+> 💡 **Certificate:** One wildcard ACM cert (`*.vosukula.online`) covers ALL subdomains — jenkins, argocd, grafana, sonar, app. You only need to generate ONE certificate. All ingress files share the same cert ARN.
+
 ---
 
 ## Step 5 — Install ArgoCD
@@ -248,8 +252,12 @@ bash scripts/04-install-argocd.sh
 
 ## Step 6 — Install Monitoring (Prometheus + Grafana)
 
-### 6a. Create Grafana admin secret FIRST
+### 6a. Create namespace and Grafana admin secret FIRST
 ```bash
+# Create namespace first (secret can't exist without it)
+./kubectl.exe create namespace monitoring --dry-run=client -o yaml | ./kubectl.exe apply -f -
+
+# Now create the secret
 ./kubectl.exe create secret generic grafana-admin-secret \
   --from-literal=admin-user=admin \
   --from-literal=admin-password=YOUR_PASSWORD \
@@ -266,9 +274,24 @@ bash scripts/05-install-monitoring.sh
 ./kubectl.exe apply -f kubernetes/ingress/grafana-ingress.yaml
 ```
 
+### 6d. Add Route53 DNS for Grafana
+```bash
+# Get the ALB address
+./kubectl.exe get ingress -n monitoring
+# Copy the ADDRESS value
+```
+Then in AWS Console: Route53 → Hosted zones → `vosukula.online` → Create record:
+- Record name: `grafana`
+- Record type: CNAME
+- Value: paste the ALB address from above
+- TTL: 300
+- Click Create
+
+Wait 1-2 min for DNS to propagate.
+
 **Access:** https://grafana.vosukula.online  
 **Username:** `admin`  
-**Password:** whatever you set in step 6a
+**Password:** whatever you set in step 6a (or `changeme` if the script created it)
 
 ---
 
@@ -315,6 +338,7 @@ java -jar agent.jar \
   -webSocket \
   -workDir "/home/ec2-user/jenkins-agent"
 ```
+java -jar agent.jar -url https://jenkins.vosukula.online -secret  080698792ce62d22336fd216d8f2822b0676feeff1d0ac2c9db9de5affee2ccd -name "jenkins-agent" -webSocket -workDir "/home/ec2-user/jenkins-agent"
 
 You should see:
 ```
@@ -646,3 +670,134 @@ stage('SonarQube Analysis') {
     }
 }
 ```
+
+---
+
+## Step 10 — Deploy with Helm Charts
+
+After pipeline builds succeed, deploy services using Helm charts (packaged deployments with rollback support).
+
+### 10a. Test Helm chart locally
+```bash
+./helm.exe template order-service ./charts/microservice \
+  -f charts/microservice/values-order.yaml \
+  --set image.tag=latest11
+```
+If output looks correct (valid YAML), proceed.
+
+### 10b. Deploy each service with Helm
+```bash
+# Order service
+./helm.exe upgrade --install order-service ./charts/microservice \
+  -f charts/microservice/values-order.yaml \
+  --set image.tag=latest11 \
+  -n order-service --create-namespace
+
+# Payment service
+./helm.exe upgrade --install payment-service ./charts/microservice \
+  -f charts/microservice/values-payment.yaml \
+  --set image.tag=latest12 \
+  -n payment-service --create-namespace
+
+# User service
+./helm.exe upgrade --install user-service ./charts/microservice \
+  -f charts/microservice/values-user.yaml \
+  --set image.tag=latest14 \
+  -n user-service --create-namespace
+```
+
+### 10c. Verify
+```bash
+./kubectl.exe get pods -n order-service
+./kubectl.exe get pods -n payment-service
+./kubectl.exe get pods -n user-service
+```
+
+---
+
+## Step 11 — Wire ArgoCD to Helm Charts (GitOps)
+
+ArgoCD watches Git and auto-deploys when Helm values change. No more manual `helm install`.
+
+### 11a. Push charts to Git first
+```bash
+git add charts/ kubernetes/argocd/apps/
+git commit -m "Add Helm charts and ArgoCD apps"
+git push origin main
+```
+
+### 11b. Apply ArgoCD Application CRDs
+```bash
+./kubectl.exe apply -f kubernetes/argocd/apps/
+```
+
+### 11c. Verify in ArgoCD UI
+Go to `https://argocd.vosukula.online/applications` — all 3 services should appear and sync.
+
+```bash
+./kubectl.exe get applications -n argocd
+# Should show: order-service, payment-service, user-service
+```
+
+### 11d. How GitOps works now
+```
+Jenkins builds image → pushes to ECR
+  → Updates image tag in charts/microservice/values-<service>.yaml
+  → Commits and pushes to Git
+  → ArgoCD detects change → auto-deploys to EKS
+```
+
+No more `kubectl apply` or `helm install` from pipeline — ArgoCD handles deployment.
+
+---
+
+## Step 12 — Install Argo Rollouts (Canary/Blue-Green)
+
+### 12a. Run install script
+```bash
+bash scripts/07-install-argo-rollouts.sh
+```
+
+### 12b. Verify
+```bash
+./kubectl.exe get pods -n argo-rollouts
+```
+
+### 12c. Enable canary for a service
+Edit `charts/microservice/values-order.yaml`:
+```yaml
+rollout:
+  enabled: true
+  strategy: canary
+```
+
+Push to Git → ArgoCD deploys using Rollout CRD instead of Deployment.
+
+### 12d. Monitor rollout
+```bash
+kubectl argo rollouts get rollout order-service -n order-service --watch
+```
+
+---
+
+## ✅ Platform Complete!
+
+All steps done. Your platform now has:
+
+| Component | Status | Access |
+|---|---|---|
+| EKS Cluster | Running | `kubectl get nodes` |
+| Jenkins CI/CD | Running | `https://jenkins.vosukula.online` |
+| ArgoCD GitOps | Synced | `https://argocd.vosukula.online` |
+| Grafana Monitoring | Running | `https://grafana.vosukula.online` |
+| SonarQube | Running | `https://sonar.vosukula.online` |
+| Argo Rollouts | Installed | Ready for canary/blue-green |
+| Helm Charts | Ready | `charts/microservice/` |
+| 3 Microservices | Deployed | order, payment, user |
+
+**Next steps (optional):**
+- Add Slack notifications to Jenkins pipeline
+- Configure Alertmanager to send alerts to Slack/email
+- Set up Grafana dashboards per service
+- Add network policies between namespaces
+- Move to `PHASES-IMPLEMENTATION.md` for deep-dive into each phase
