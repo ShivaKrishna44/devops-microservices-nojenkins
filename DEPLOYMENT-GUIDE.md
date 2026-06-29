@@ -542,7 +542,7 @@ aws ecr get-login-password --region us-east-1 | \
 5. Watch progress in Console Output
 6. ArgoCD auto-syncs the new image if using GitOps mode
 
-### How to Check ArgoCD Sync
+### How to Check ArgoCD Sync 
 
 1. Go to: `https://argocd.vosukula.online/applications`
 2. Each app shows: **Healthy** (green) or **Degraded** (red)
