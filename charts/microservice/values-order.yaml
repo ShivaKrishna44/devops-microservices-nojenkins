@@ -1,3 +1,4 @@
 image:
   repository: 589389425618.dkr.ecr.us-east-1.amazonaws.com/order-service
-  tag: "latest11"
+  tag: "latest111"
+
