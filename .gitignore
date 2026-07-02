@@ -1,15 +1,43 @@
-# Ignore local Terraform directory and cache folders
+# Terraform
 **/.terraform/
-**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
-# Ignore local variable assignment files containing keys/secrets
+# Keep lock file for reproducibility
+!Terraform/.terraform.lock.hcl
+
+# Terraform vars (keep dev/prod)
 **/*.tfvars
 !**/prod.tfvars
 !**/dev.tfvars
 
-# Ignore crash logs and state files if generated locally by mistake
-*.tfstate
-*.tfstate.*
-crash.log
+# Binaries (should not be in repo)
 kubectl.exe
 helm.exe
+agent.jar
+*.exe
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Docker
+docker/
+
+# Empty/unused folders
+kubernetes/jenkins/
+kubernetes/namespaces/

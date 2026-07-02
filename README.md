@@ -1,292 +1,188 @@
-**1. Terraform Layer Debugging****
-
--Check Terraform State   
-terraform state list
-
--Check Resource Details
-terraform state show aws_iam_role.ebs_csi
-
--Validate Syntax
-terraform validate
-
--Check Formatting
-terraform fmt -recursive
-
--Preview Changes
-terraform plan
-
--Refresh State
-terraform refresh
-
-**Compare AWS vs State**
-
--terraform state list
-aws eks list-access-entries --cluster-name expense-dev
-
--Debug Failed Resource
-terraform apply -target=aws_eks_addon.ebs_csi
-
-**2. AWS EKS Cluster Debugging**
-   
--Verify Cluster Exists
-aws eks list-clusters
-
--Cluster Health
-aws eks describe-cluster --name expense-dev
-
--Update Kubeconfig
-aws eks update-kubeconfig --region us-east-1 --name expense-dev
-
--Verify Connectivity
-kubectl cluster-info
-
--Verify Nodes
-kubectl get nodes -o wide
-
-
-**3. EKS Access Entry Debugging**
-
--List Access Entries
-aws eks list-access-entries --cluster-name expense-dev
-
--List Policies
-aws eks list-associated-access-policies --cluster-name expense-dev --principal-arn arn:aws:iam::589389425618:root
-
--Check Terraform State
-terraform state list | grep access
-
-**4. Node Group Debugging****
--Check Node Group
-aws eks list-nodegroups --cluster-name expense-dev
-
--Node Group Details
-aws eks describe-nodegroup --cluster-name expense-dev --nodegroup-name dev
-
--Check EC2
-aws ec2 describe-instances
-
-**5. IAM Debugging**
-
--Check Role
-aws iam get-role --role-name expense-dev-ebs-csi-role
-
--Attached Policies
-aws iam list-attached-role-policies --role-name expense-dev-ebs-csi-role
-
--Check OIDC Provider 
-aws iam list-open-id-connect-providers
-
-**6. IRSA Debugging**
-
--Check Service Account
-kubectl get sa -n kube-system
-
--Check Annotation
-kubectl get sa ebs-csi-controller-sa -n kube-system -o yaml
-
--Expected:
-eks.amazonaws.com/role-arn:
-
--Verify ALB Controller Role
-kubectl get sa aws-load-balancer-controller -n kube-system -o yaml
-
-**7. EBS CSI Driver Debugging**
-
--This was one of your biggest issues.
-
--Pods
-kubectl get pods -n kube-system | grep ebs
-
-Expected:
-
-Running Logs :- kubectl logs -n kube-system deploy/ebs-csi-controller
-
-or
-
-kubectl logs -n kube-system <ebs-csi-pod-name>
-
--Describe -  kubectl describe pod -n kube-system <ebs-csi-pod-name>
-
-Common Error: UnauthorizedOperation
-
-Means:  IAM/IRSA issue
-
-**8. PVC Debugging**
-
--Check PVC
-kubectl get pvc -A
-
--Describe PVC
-kubectl describe pvc -n jenkins
-
-Expected: Bound
-Common Error: Pending
-
-Cause: StorageClass - EBS CSI
-
-**9. StorageClass Debugging**
- 
--List Storage Classes
-kubectl get storageclass
-
-Expected: gp2  gp3
-
--Default StorageClass
-kubectl get sc
-
-Look for: (default)
-
-**10. Jenkins Debugging**
-
--Pod Status
-kubectl get pods -n jenkins
-
-Logs - kubectl logs -n jenkins jenkins-0
-
--Describe Pod
-kubectl describe pod -n jenkins jenkins-0
-
-- PVC
-kubectl get pvc -n jenkins
-
-**11. Jenkins Credentials Debugging**
-
-**Inside Jenkins:**
-
-Manage Jenkins
-→ Credentials
-
-Verify: GitHub ,AWS ,SSH Agent
-
-**12. Jenkins Agent Debugging**
-
-Check Nodes -> Manage Jenkins
-→ Nodes
-
-Expected: Online 
-Agent Logs
-Node
-→ Log
-
-Common Error:
-
-Waiting for next available executor
-
-Means:
-
-Agent offline
-Label mismatch
-No executor
-1.  Docker Debugging
-Images
-docker images
-
-or
-
-podman images
-Build
-docker build -t test .
-Running Containers
-docker ps -a
-
-14. ECR Debugging
-Repositories
-aws ecr describe-repositories
-Images
-aws ecr describe-images \
---repository-name order-service
-Login Test
-aws ecr get-login-password \
---region us-east-1
-
-15. Kubernetes Deployment Debugging
-Deployments
-kubectl get deploy -A
-Pods
-kubectl get pods -A
-Describe
-kubectl describe deploy order-service
-Rollout
-kubectl rollout status deployment/order-service
-Restart
-kubectl rollout restart deployment/order-service
-
-16. Service Debugging
-Services
-kubectl get svc -A
-Describe
-kubectl describe svc jenkins -n jenkins
-
-Common Error:
-
-EXTERNAL-IP Pending
-
-Cause:
-
-ALB Controller
-IAM
-Subnet Tagging
-17. ALB Controller Debugging
-Pods
-kubectl get pods \
--n kube-system \
-| grep load-balancer
-Logs
-kubectl logs \
--n kube-system \
-deployment/aws-load-balancer-controller
-
-Common Error:
-
-AccessDenied
-
-Means:
-
-IAM Policy Missing
-18. Ingress Debugging
-19. 
-List - kubectl get ingress -A
-Describe - kubectl describe ingress -n jenkins jenkins-ingress
-
-Common Errors:
-
-No certificate found
-No ALB created
-Target group unhealthy
-19. Route53 Debugging
-Hosted Zones
-aws route53 list-hosted-zones
-Records
-aws route53 list-resource-record-sets \
---hosted-zone-id <zone-id>
-DNS Lookup
-nslookup jenkins.vosukula.online
-
-or
-
-dig jenkins.vosukula.online
-20. End-to-End Verification
-
-When everything is working:
-
-terraform plan
+# DevOps Microservices Platform (GitHub Actions + ArgoCD)
+
+Production-ready microservices platform on AWS EKS using **GitHub Actions** for CI and **ArgoCD** for CD (GitOps).
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         CI/CD Flow (No Jenkins)                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Developer → git push → GitHub (main branch)                             │
+│                              ↓                                           │
+│  GitHub Actions (CI):                                                    │
+│    ├── Detect changed services (paths-filter)                            │
+│    ├── Build Docker image                                                │
+│    ├── Push to AWS ECR                                                   │
+│    └── Update image tag in Helm values → git push                        │
+│                              ↓                                           │
+│  ArgoCD (CD — GitOps):                                                   │
+│    ├── Polls Git every 3 min                                             │
+│    ├── Detects new image tag in values file                              │
+│    └── Auto-syncs to EKS cluster                                         │
+│                              ↓                                           │
+│  EKS Cluster:                                                            │
+│    ├── order-service   (namespace: order-service)                        │
+│    ├── payment-service (namespace: payment-service)                      │
+│    └── user-service    (namespace: user-service)                         │
+│                                                                          │
+│  Monitoring: Prometheus + Grafana                                        │
+│  Code Quality: SonarQube                                                 │
+│  Progressive Delivery: Argo Rollouts (canary/blue-green)                 │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Why GitHub Actions Over Jenkins?
+
+|    Aspect      | Jenkins                                        | GitHub Actions |
+|----------------|------------------------------------------------|----------------|
+| Infrastructure | Need EC2 agent + EKS pod                       | Zero infra — runs on GitHub cloud |
+| Maintenance    | Plugin updates, disk space, agent connectivity | Zero maintenance |
+| Cost           | EC2 running 24/7 ($50+/month)                  | Free for public repos, 2000 min/month for private |
+| Setup time     | 2+ hours (Helm, secrets, agent, plugins)       | 5 minutes (add workflow file) |
+| Integration    | Manual webhook + credential setup              | Native GitHub integration |
+| Scaling        | Need more agents for parallel builds           | Auto-scales (unlimited runners) |
+
+---
+
+## Project Structure
+
+```
+.
+├── .github/workflows/
+│   └── ci-cd.yml              ← GitHub Actions CI/CD pipeline
+├── app/
+│   ├── order-service/         ← Python Flask microservice
+│   ├── payment-service/       ← Python Flask microservice
+│   └── user-service/          ← Python Flask microservice
+├── charts/
+│   └── microservice/          ← Helm chart (shared across services)
+├── kubernetes/
+│   ├── argocd/apps/           ← ArgoCD Application CRDs
+│   ├── ingress/               ← ALB ingress rules
+│   ├── monitoring/            ← Grafana values
+│   └── sonarqube/             ← SonarQube values
+├── scripts/                   ← Cluster setup scripts
+├── Terraform/                 ← Infrastructure as Code (EKS + VPC + ECR)
+├── mcp-server/                ← AI monitoring agent (MCP)
+└── README.md
+```
+
+---
+
+## Quick Start
+
+### 1. Provision Infrastructure
+```bash
+cd Terraform
+terraform init -backend-config=tfvars/dev/backend.tfvars
+terraform apply -var-file=tfvars/dev/dev.tfvars
+```
+
+### 2. Configure kubectl
+```bash
+aws eks update-kubeconfig --name expense-dev --region us-east-1
 kubectl get nodes
-kubectl get pods -A
-kubectl get pvc -A
-kubectl get ingress -A
-kubectl get svc -A
-aws ecr describe-repositories
-aws eks list-access-entries \
---cluster-name expense-dev
+```
 
-These 8 commands alone will tell you the health of almost the entire platform in under 2 minutes.
+### 3. Install Cluster Components
+```bash
+bash scripts/01-install-tools.sh
+bash scripts/02-install-alb-controller.sh
+bash scripts/04-install-argocd.sh
+bash scripts/05-install-monitoring.sh
+bash scripts/06-install-sonarqube.sh
+bash scripts/07-install-argo-rollouts.sh
+```
 
-For your project, the Top 5 commands that saved us most often were:
+### 4. Add GitHub Secrets
+Go to: GitHub repo → Settings → Secrets and variables → Actions
 
-kubectl describe pod
-kubectl logs
-kubectl describe svc
-terraform state list
-aws iam list-attached-role-policies
+| Secret Name             |         Value       |
+|-------------------------|---------------------|
+| `AWS_ACCESS_KEY_ID`     | Your AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key |
 
-If you master interpreting the output of those five, you'll solve most EKS/Jenkins/Terraform issues without external help.
+### 5. Push Code → Auto Deploy
+```bash
+git add .
+git commit -m "initial commit"
+git push origin main
+```
+
+GitHub Actions will:
+1. Detect which service changed
+2. Build Docker image
+3. Push to ECR
+4. Update Helm values with new tag
+5. ArgoCD auto-syncs to cluster
+
+---
+
+## How the Pipeline Works
+
+### Auto-trigger (on push to main)
+- Only builds services that actually changed (uses `dorny/paths-filter`)
+- Commits new image tag to Helm values
+- ArgoCD picks up the change and deploys
+
+### Manual trigger (workflow_dispatch)
+- Go to: Actions → CI/CD Pipeline → Run workflow
+- Select service + optional tag
+- Builds and deploys the selected service
+
+---
+
+## Deployment Flow
+
+```
+Push code to main
+    ↓
+GitHub Actions detects: app/order-service/** changed
+    ↓
+Builds: docker build → ECR push (tag: commit SHA)
+    ↓
+Updates: charts/microservice/values-order.yaml → tag: "abc123def"
+    ↓
+Commits & pushes the values change
+    ↓
+ArgoCD detects Git change (polls every 3 min)
+    ↓
+ArgoCD syncs: deploys new image to EKS
+    ↓
+✅ order-service running with new version
+```
+
+---
+
+## URLs
+
+| Service     | URL                              |
+|-------------|----------------------------------|
+| ArgoCD      | https://argocd.vosukula.online   |
+| Grafana     | https://grafana.vosukula.online  |
+| SonarQube   | https://sonar.vosukula.online    |
+| Application | https://app.vosukula.online      |
+
+---
+
+## Tech Stack
+
+| Component           | Tool                              |
+|---------------------|-----------------------------------|
+| Cloud               | AWS (EKS, ECR, VPC, ALB, Route53) |
+| IaC                 | Terraform                         |
+| CI                  | GitHub Actions                    |
+| CD (GitOps)         | ArgoCD                            |
+| Containers          | Docker, Helm                      |
+| Orchestration       | Kubernetes (EKS)                  |
+| Monitoring          | Prometheus + Grafana              |
+| Code Quality        | SonarQube                         |
+| Progressive Delivery| Argo Rollouts                     |
+| AI Monitoring       | MCP Server (custom)               |
