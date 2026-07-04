@@ -64,10 +64,11 @@ jobs:
   # ==========================================
   build-order:
     runs-on: ubuntu-latest
-    needs: detect-changes
+    needs: [detect-changes]
     if: |
-      (github.event_name == 'push' && needs.detect-changes.outputs.order == 'true') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'order-service')
+      always() &&
+      ((github.event_name == 'push' && needs.detect-changes.outputs.order == 'true') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'order-service'))
     steps:
       - uses: actions/checkout@v4
 
@@ -106,10 +107,11 @@ jobs:
   # ==========================================
   build-payment:
     runs-on: ubuntu-latest
-    needs: detect-changes
+    needs: [detect-changes]
     if: |
-      (github.event_name == 'push' && needs.detect-changes.outputs.payment == 'true') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'payment-service')
+      always() &&
+      ((github.event_name == 'push' && needs.detect-changes.outputs.payment == 'true') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'payment-service'))
     steps:
       - uses: actions/checkout@v4
 
@@ -148,10 +150,11 @@ jobs:
   # ==========================================
   build-user:
     runs-on: ubuntu-latest
-    needs: detect-changes
+    needs: [detect-changes]
     if: |
-      (github.event_name == 'push' && needs.detect-changes.outputs.user == 'true') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'user-service')
+      always() &&
+      ((github.event_name == 'push' && needs.detect-changes.outputs.user == 'true') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'user-service'))
     steps:
       - uses: actions/checkout@v4
 
