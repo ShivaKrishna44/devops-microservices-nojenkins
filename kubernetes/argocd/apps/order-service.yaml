@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/ShivaKrishna44/devops-microservices-platform.git
+    repoURL: https://github.com/ShivaKrishna44/devops-microservices-nojenkins.git
     targetRevision: main
     path: charts/microservice
     helm:
