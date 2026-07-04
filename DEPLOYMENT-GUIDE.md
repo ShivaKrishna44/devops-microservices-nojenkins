@@ -191,16 +191,33 @@ Enables canary and blue-green deployment strategies.
 
 ---
 
-### Step 8: Configure GitHub Actions (5 min)
+### Step 8: Configure GitHub Actions + OIDC (5 min)
 
-#### 8a. Add GitHub Secrets
+#### 8a. Setup AWS OIDC for GitHub (one-time, already done)
 
-Go to: **Repository → Settings → Secrets and variables → Actions → New repository secret**
+GitHub Actions authenticates to AWS using OIDC — no access keys needed.
 
-| Secret Name             | Value               |
-|-------------------------|---------------------|
-| `AWS_ACCESS_KEY_ID`     | Your IAM access key |
-| `AWS_SECRET_ACCESS_KEY` | Your IAM secret key |
+**What was configured in AWS Console:**
+1. IAM → Identity Providers → Added `token.actions.githubusercontent.com` (OpenID Connect)
+2. IAM → Roles → Created `github-actions-admin-role` with:
+   - Trust policy: allows only `repo:ShivaKrishna44/devops-microservices-nojenkins:*`
+   - Permissions: `AdministratorAccess` (scope down for production)
+
+**Nothing to configure in GitHub** — the workflow file handles it with:
+```yaml
+permissions:
+  id-token: write   # Allows OIDC token request
+  contents: write   # Allows git push
+
+- uses: aws-actions/configure-aws-credentials@v4
+  with:
+    role-to-assume: arn:aws:iam::589389425618:role/github-actions-admin-role
+    aws-region: us-east-1
+```
+
+**Role ARN:** `arn:aws:iam::589389425618:role/github-actions-admin-role`
+
+See `OIDC-SETUP.md` for full details and troubleshooting.
 
 #### 8b. Apply ArgoCD Applications
 
@@ -217,13 +234,82 @@ kubectl get applications -n argocd
 # user-service      Synced        Healthy
 ```
 
-#### 8c. Trigger First Build
+#### 8c. First Deploy — Build & Push Images (one-time bootstrap)
 
-**Option A — Push code changes:**
+⚠️ ArgoCD applications will show `Degraded` until images exist in ECR. This step creates the first images.
+
+**Login to ECR:**
 ```bash
-# Edit any service file
-echo "# trigger" >> app/order-service/app.py
-git add . && git commit -m "trigger first build" && git push
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 589389425618.dkr.ecr.us-east-1.amazonaws.com
+```
+
+**Build + push all 3 services:**
+```bash
+# Order service
+docker build -t order-service:v1 ./app/order-service/
+docker tag order-service:v1 589389425618.dkr.ecr.us-east-1.amazonaws.com/order-service:v1
+docker push 589389425618.dkr.ecr.us-east-1.amazonaws.com/order-service:v1
+
+# Payment service
+docker build -t payment-service:v1 ./app/payment-service/
+docker tag payment-service:v1 589389425618.dkr.ecr.us-east-1.amazonaws.com/payment-service:v1
+docker push 589389425618.dkr.ecr.us-east-1.amazonaws.com/payment-service:v1
+
+# User service
+docker build -t user-service:v1 ./app/user-service/
+docker tag user-service:v1 589389425618.dkr.ecr.us-east-1.amazonaws.com/user-service:v1
+docker push 589389425618.dkr.ecr.us-east-1.amazonaws.com/user-service:v1
+```
+
+**Update Helm values with tag `v1`:**
+```bash
+sed -i 's|tag:.*|tag: "v1"|' charts/microservice/values-order.yaml
+sed -i 's|tag:.*|tag: "v1"|' charts/microservice/values-payment.yaml
+sed -i 's|tag:.*|tag: "v1"|' charts/microservice/values-user.yaml
+```
+
+**Push to Git → ArgoCD auto-deploys:**
+```bash
+git add .
+git commit -m "deploy: all services v1"
+git push origin main
+```
+
+ArgoCD will detect the Helm values change and sync all 3 services to EKS.
+
+**Verify pods are running:**
+```bash
+kubectl get pods -n order-service
+kubectl get pods -n payment-service
+kubectl get pods -n user-service
+```
+
+**Alternative — deploy directly with Helm (bypasses ArgoCD, quicker for testing):**
+```bash
+./helm.exe upgrade --install order-service ./charts/microservice \
+  -f charts/microservice/values-order.yaml --set image.tag=v1 \
+  -n order-service --create-namespace
+
+./helm.exe upgrade --install payment-service ./charts/microservice \
+  -f charts/microservice/values-payment.yaml --set image.tag=v1 \
+  -n payment-service --create-namespace
+
+./helm.exe upgrade --install user-service ./charts/microservice \
+  -f charts/microservice/values-user.yaml --set image.tag=v1 \
+  -n user-service --create-namespace
+```
+
+---
+
+#### 8d. Subsequent Deploys (after first time)
+
+After the first deploy, all future deployments are automatic:
+
+**Option A — Push code (auto-trigger):**
+```bash
+# Change any file in app/order-service/
+git add . && git commit -m "update order service" && git push
+# GitHub Actions builds → pushes to ECR → updates Helm values → ArgoCD deploys
 ```
 
 **Option B — Manual trigger:**
