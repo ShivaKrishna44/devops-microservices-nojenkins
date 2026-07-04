@@ -100,6 +100,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add charts/microservice/values-order.yaml
           git diff --staged --quiet || git commit -m "deploy: order-service:${{ steps.tag.outputs.tag }}"
+          git pull --rebase origin main
           git push
 
   # ==========================================
@@ -143,6 +144,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add charts/microservice/values-payment.yaml
           git diff --staged --quiet || git commit -m "deploy: payment-service:${{ steps.tag.outputs.tag }}"
+          git pull --rebase origin main
           git push
 
   # ==========================================
@@ -186,4 +188,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add charts/microservice/values-user.yaml
           git diff --staged --quiet || git commit -m "deploy: user-service:${{ steps.tag.outputs.tag }}"
+          git pull --rebase origin main
           git push
