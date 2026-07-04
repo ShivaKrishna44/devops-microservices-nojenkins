@@ -665,3 +665,140 @@ terraform destroy -var-file=tfvars/dev/dev.tfvars
 ├── DEPLOYMENT-GUIDE.md            ← This file
 └── README.md                      ← Project overview
 ```
+
+
+---
+
+## Issues Fixed During Deployment
+
+### Issue 1: Terraform SSM Data Source Fails on First Apply
+
+**Error:** `reading SSM Parameter (/expense/dev/private_subnet_ids): couldn't find resource`
+
+**Root cause:** `data.tf` had a `data.aws_ssm_parameter` trying to READ a parameter that doesn't exist yet (created by VPC module during the same apply).
+
+**Fix:** Removed the dead SSM data source from `data.tf`. The EKS module already uses `module.vpc.private_subnet_ids` directly — no SSM lookup needed.
+
+---
+
+### Issue 2: ACM Certificate Not Found
+
+**Error:** `CertificateNotFound: Certificate 'arn:aws:acm:..../b47b97ba-...' not found`
+
+**Root cause:** Old certificate ARN in ingress YAML was deleted/expired. New cert was created but ingress wasn't re-applied.
+
+**Fix:** Updated all ingress files with new cert ARN (`121432d9-8440-4ed7-b5bb-3b015fc3f9d0`) and re-applied:
+```bash
+./kubectl.exe apply -f kubernetes/argocd/argocd-ingress.yaml
+./kubectl.exe apply -f kubernetes/ingress/
+```
+
+---
+
+### Issue 3: GitHub Actions Workflow Skipping on Manual Trigger
+
+**Error:** All build jobs show "Skipped" when using Run workflow.
+
+**Root cause:** Build jobs had `needs: detect-changes` — when `detect-changes` is skipped (only runs on push), dependent jobs also skip.
+
+**Fix:** Added `always() &&` to the `if` condition so manual triggers evaluate independently:
+```yaml
+if: |
+  always() &&
+  ((github.event_name == 'push' && needs.detect-changes.outputs.order == 'true') ||
+  (github.event_name == 'workflow_dispatch' && github.event.inputs.service_name == 'order-service'))
+```
+
+---
+
+### Issue 4: Git Push Conflict in Workflow (Race Condition)
+
+**Error:** `! [rejected] main -> main (fetch first)` — workflow can't push because another workflow already pushed.
+
+**Root cause:** Multiple service builds run in parallel, each tries to commit + push to the same branch. Second one fails because remote is ahead.
+
+**Fix:** Added `git pull --rebase origin main` before `git push` in all build jobs.
+
+---
+
+### Issue 5: ArgoCD Pointing to Wrong Git Repository
+
+**Error:** ArgoCD shows Synced but pods have `ImagePullBackOff` with old tags.
+
+**Root cause:** ArgoCD Application CRDs had `repoURL: devops-microservices-platform` (old repo) instead of `devops-microservices-nojenkins` (this repo).
+
+**Fix:** Updated all 3 app YAMLs:
+```yaml
+source:
+  repoURL: https://github.com/ShivaKrishna44/devops-microservices-nojenkins.git
+```
+Then deleted and re-applied:
+```bash
+./kubectl.exe delete -f kubernetes/argocd/apps/
+./kubectl.exe apply -f kubernetes/argocd/apps/
+```
+
+---
+
+### Issue 6: App Ingress Returns "Backend service does not exist"
+
+**Error:** `services "order-service" not found` in ingress describe output.
+
+**Root cause:** App ingress was in `default` namespace but services are in `order-service`, `payment-service`, `user-service` namespaces. Ingress can only route to services in its own namespace.
+
+**Fix:** Replaced single ingress with 3 per-namespace ingresses sharing one ALB using `alb.ingress.kubernetes.io/group.name: "app-shared-alb"`. Each ingress lives in the service's namespace.
+
+---
+
+### Issue 7: Flask Returns 404 on Ingress Paths
+
+**Error:** `curl https://app.vosukula.online/order` returns 404 Not Found.
+
+**Root cause:** Flask app has routes `/` and `/orders`, but ingress sends path `/order`. Flask doesn't match `/order` → returns 404.
+
+**Fix:** Added matching routes to each Flask app:
+```python
+@app.route("/")
+@app.route("/order")      # ← matches ingress path
+def home(): ...
+
+@app.route("/orders")
+@app.route("/order/orders")  # ← matches ingress path + subpath
+def orders(): ...
+```
+Rebuilt and pushed via GitHub Actions.
+
+---
+
+### Issue 8: Root URL (/) Returns 404
+
+**Error:** `https://app.vosukula.online/` shows 404 but `/order`, `/payment`, `/user` work.
+
+**Root cause:** No ingress rule for the root path `/`.
+
+**Fix:** Added root path `/` to the order-service ingress (acts as landing page):
+```yaml
+paths:
+  - path: /
+    pathType: Prefix
+    backend:
+      service:
+        name: order-service
+        port:
+          number: 5000
+```
+
+---
+
+## Working URLs
+
+| URL | Response |
+|---|---|
+| https://app.vosukula.online/ | `{"service":"order-service","status":"running"}` |
+| https://app.vosukula.online/order | `{"service":"order-service","status":"running"}` |
+| https://app.vosukula.online/order/orders | List of orders |
+| https://app.vosukula.online/payment | `{"service":"payment-service","status":"running"}` |
+| https://app.vosukula.online/payment/payments | List of payments |
+| https://app.vosukula.online/user | `{"service":"user-service","status":"running"}` |
+| https://app.vosukula.online/user/users | List of users |
+| https://argocd.vosukula.online | ArgoCD UI |

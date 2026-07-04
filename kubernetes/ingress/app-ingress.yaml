@@ -7,7 +7,7 @@ metadata:
   namespace: order-service
   annotations:
     kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/group.name: "app-shared-alb"
+    alb.ingress.kubernetes.io/group.name: "vosukula-shared-alb"
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
@@ -20,6 +20,13 @@ spec:
   - host: app.vosukula.online
     http:
       paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: order-service
+            port:
+              number: 5000
       - path: /order
         pathType: Prefix
         backend:
@@ -36,7 +43,7 @@ metadata:
   namespace: payment-service
   annotations:
     kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/group.name: "app-shared-alb"
+    alb.ingress.kubernetes.io/group.name: "vosukula-shared-alb"
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
@@ -65,7 +72,7 @@ metadata:
   namespace: user-service
   annotations:
     kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/group.name: "app-shared-alb"
+    alb.ingress.kubernetes.io/group.name: "vosukula-shared-alb"
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
