@@ -3,6 +3,7 @@ from flask import Flask, jsonify
 app = Flask(__name__)
 
 @app.route("/")
+@app.route("/order")
 def home():
     return jsonify({
         "service": "order-service",
@@ -10,6 +11,7 @@ def home():
     })
 
 @app.route("/orders")
+@app.route("/order/orders")
 def orders():
     return jsonify([
         {
