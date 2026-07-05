@@ -802,3 +802,107 @@ paths:
 | https://app.vosukula.online/user | `{"service":"user-service","status":"running"}` |
 | https://app.vosukula.online/user/users | List of users |
 | https://argocd.vosukula.online | ArgoCD UI |
+
+
+---
+
+## Deployment Strategy: Rolling Update vs Canary
+
+### Default: Standard Rolling Update (`rollout.enabled: false`)
+
+This is what runs by default. Kubernetes handles zero-downtime deployments:
+
+```
+New image pushed → Deployment creates new pods → old pods terminated
+Traffic shifts automatically once readiness probe passes
+```
+
+No Argo Rollouts needed. Simple and reliable.
+
+**How to deploy (standard):**
+1. Push code → GitHub Actions builds + pushes to ECR
+2. Workflow updates image tag in `values-<service>.yaml`
+3. ArgoCD syncs → Deployment updates → rolling update happens
+
+**How to rollback (standard):**
+```bash
+kubectl rollout undo deployment/order-service -n order-service
+```
+
+---
+
+### Canary Mode: Argo Rollouts (`rollout.enabled: true`)
+
+Enable for high-risk deployments where you want gradual traffic shift.
+
+**To enable canary for one service:**
+
+Edit `charts/microservice/values-order.yaml`:
+```yaml
+rollout:
+  enabled: true
+```
+
+Push to Git → ArgoCD syncs → deploys Argo Rollout instead of Deployment.
+
+**What happens:**
+```
+New image → 10% traffic to canary → wait 2 min → 30% → wait → 60% → wait → 100%
+```
+
+If something looks wrong at any step:
+```bash
+kubectl argo rollouts abort order-service -n order-service
+# Instantly routes 100% back to stable version
+```
+
+**To promote (skip waiting):**
+```bash
+kubectl argo rollouts promote order-service -n order-service
+```
+
+**To monitor:**
+```bash
+kubectl argo rollouts get rollout order-service -n order-service --watch
+```
+
+---
+
+### What Changes in the Helm Chart
+
+| `rollout.enabled` | Deployment | Rollout | Service Name | Ingress Routes To |
+|---|---|---|---|---|
+| `false` (default) | ✅ Created | ❌ Skipped | `order-service` | `order-service` |
+| `true` (canary) | ❌ Skipped | ✅ Created | `order-service-stable` + `order-service-canary` | `order-service-stable` |
+
+**Switch back to standard anytime:**
+```yaml
+rollout:
+  enabled: false
+```
+Push → ArgoCD removes Rollout, creates Deployment. Zero downtime.
+
+---
+
+### When to Use Which
+
+| Situation | Strategy |
+|---|---|
+| Normal code updates | Standard Deployment (default) |
+| First deploy of a new service | Standard Deployment |
+| Dev/staging environments | Standard Deployment |
+| Major refactor going to production | Canary (10→30→60→100%) |
+| Payment/critical service update | Canary + manual promotion |
+| Quick hotfix | Standard Deployment (fastest) |
+
+---
+
+### Ingress is Now Part of Helm Chart
+
+The app ingress is no longer a static YAML file. It's rendered per-service by Helm:
+- `charts/microservice/templates/ingress.yaml` — creates one ingress per service
+- Each service gets its own path (`/order`, `/payment`, `/user`)
+- All share the same ALB via `group.name: "vosukula-shared-alb"`
+- When canary is enabled, ingress automatically routes to `-stable` service
+
+**No manual ingress apply needed** — ArgoCD handles everything.

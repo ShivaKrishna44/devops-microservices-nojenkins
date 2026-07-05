@@ -10,7 +10,8 @@ echo "========================================="
 ./helm.exe repo add eks https://aws.github.io/eks-charts
 ./helm.exe repo update
 
-# FIX: Added line-continuation backslashes and mapped your IAM role
+# Installs the AWS Load Balancer Controller on EKS
+# Uses IRSA (IAM Roles for Service Accounts) — no access keys needed
 ./helm.exe upgrade --install aws-load-balancer-controller \
   eks/aws-load-balancer-controller \
   -n kube-system \
@@ -22,9 +23,8 @@ echo "========================================="
 echo "Waiting for controller..."
 ./kubectl.exe rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=120s
 
-# FIX: Fixed line-break syntax for the pod lookup
 ./kubectl.exe get pods \
   -n kube-system \
   -l app.kubernetes.io/name=aws-load-balancer-controller
 
-echo " ###### AWS Load Balancer Controller and ALB Ingress Support done ###### "
+echo " ###### AWS Load Balancer Controller installed ###### "

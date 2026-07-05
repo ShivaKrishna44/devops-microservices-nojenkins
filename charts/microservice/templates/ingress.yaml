@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  labels:
+    {{- include "microservice.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/group.name: "vosukula-shared-alb"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certArn | default "arn:aws:acm:us-east-1:589389425618:certificate/121432d9-8440-4ed7-b5bb-3b015fc3f9d0" | quote }}
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+spec:
+  ingressClassName: alb
+  rules:
+  - host: {{ .Values.ingress.host | default "app.vosukula.online" }}
+    http:
+      paths:
+      - path: /{{ .Values.ingress.path | default .Release.Name }}
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ if .Values.rollout.enabled }}{{ .Release.Name }}-stable{{ else }}{{ .Release.Name }}{{ end }}
+            port:
+              number: {{ .Values.service.port }}
+      {{- if .Values.ingress.rootPath }}
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ if .Values.rollout.enabled }}{{ .Release.Name }}-stable{{ else }}{{ .Release.Name }}{{ end }}
+            port:
+              number: {{ .Values.service.port }}
+      {{- end }}

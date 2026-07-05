@@ -16,6 +16,8 @@ echo "Waiting for core components..."
 ./kubectl.exe wait --for=condition=available deployment --all -n argocd --timeout=180s
 
 # Apply ArgoCD ingress
+# This is a highly optimized configuration for 
+# exposing ArgoCD securely using the AWS Load Balancer Controller.
 ./kubectl.exe apply -f kubernetes/argocd/argocd-ingress.yaml
 
 ./kubectl.exe get pods -n argocd

@@ -1,3 +1,6 @@
 image:
   repository: 589389425618.dkr.ecr.us-east-1.amazonaws.com/payment-service
-  tag: "038ddf536755"
+  tag: "c5009108bf4e"
+
+ingress:
+  path: "payment"
