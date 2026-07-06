@@ -1,0 +1,38 @@
+name: CodeQL — Code Security Analysis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'mcp-server/**'
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Monday at 6am UTC (catches new vulnerability patterns)
+    - cron: '0 6 * * 1'
+
+permissions:
+  security-events: write
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze Python Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # Queries: security + quality (like SonarQube)
+          queries: +security-and-quality
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

@@ -906,3 +906,167 @@ The app ingress is no longer a static YAML file. It's rendered per-service by He
 - When canary is enabled, ingress automatically routes to `-stable` service
 
 **No manual ingress apply needed** — ArgoCD handles everything.
+
+
+---
+
+### Issue 9: Prometheus Pod Stuck in Pending (Node Resource Pressure)
+
+**Error:** Grafana shows "Status: 502 — connection refused" on all dashboards.
+
+**Root cause:** Prometheus pod `Pending` — two problems:
+1. Node 1: "Too many pods" — t3.medium supports max 17 pods, hit the limit
+2. Node 2: "PV node affinity mismatch" — Prometheus PVC bound to Node 1's AZ, can't schedule on Node 2
+
+**Fix (immediate):**
+```bash
+# Scale down alertmanager to free 1 pod slot + memory on Node 1
+kubectl scale statefulset alertmanager-monitoring-kube-prometheus-alertmanager -n monitoring --replicas=0
+
+# Uninstall SonarQube (biggest memory hog, ~500MB freed)
+helm uninstall sonarqube -n sonarqube
+kubectl delete namespace sonarqube
+```
+
+After 30 seconds, Prometheus schedules on Node 1 → Grafana dashboards work again.
+
+**Fix (permanent):** Reduce HPA `minReplicas: 2` → `minReplicas: 1` in `values.yaml` so each service runs 1 pod instead of 2. Already applied.
+
+**Why this happens:** 2× t3.medium nodes (4GB RAM, 17 pods max each) running:
+- ArgoCD (6 pods)
+- Monitoring stack (6 pods)
+- 3 microservices (3-6 pods)
+- ALB Controller (2 pods)
+- SonarQube (2 pods)
+= ~19-22 pods total — exceeds capacity of 2 small nodes
+
+**Long-term solutions:**
+| Option | Impact |
+|---|---|
+| Increase node size: t3.medium → t3.large (8GB, 35 pods) | Best — doubles capacity |
+| Add 3rd node | More pod slots, redundancy |
+| Remove SonarQube from EKS (run externally) | Frees ~500MB |
+| Reduce `minReplicas: 1` for all services | Already done ✅ |
+| Scale down alertmanager when not needed | Quick win |
+
+---
+
+### Issue 10: ArgoCD Repo Server DNS Failure
+
+**Error:** "Unable to sync: error resolving repo revision: dns lookup error: connection refused"
+
+**Root cause:** ArgoCD repo-server pod lost DNS resolution due to node memory pressure. CoreDNS or the pod's network stack was affected.
+
+**Fix:**
+```bash
+kubectl rollout restart deployment/argocd-repo-server -n argocd
+```
+
+After restart, repo-server reconnects to GitHub and syncs resume.
+
+---
+
+### Resource Management Summary
+
+**t3.medium node limits:**
+- RAM: 4 GB (3.5 GB allocatable)
+- Pods: 17 max per node (ENI limit)
+- CPU: 2 vCPUs
+
+**What fits on 2× t3.medium (total: 7GB RAM, 34 pods):**
+```
+Essential (always running):
+  ArgoCD:          6 pods  (~800MB)
+  ALB Controller:  2 pods  (~200MB)
+  Monitoring:      5 pods  (~900MB)  [without alertmanager]
+  3 Services:      3 pods  (~400MB)
+                   ─────────────────
+  Total:           16 pods (~2.3GB)  ← fits on 2 nodes
+
+Optional (add if space allows):
+  Alertmanager:    1 pod   (~100MB)
+  SonarQube:       2 pods  (~500MB)  ← too heavy for t3.medium
+  HPA scaling:     +3 pods (~400MB)
+```
+
+**Recommendation for dev:** Keep `minReplicas: 1`, no SonarQube on cluster, no alertmanager. Fits comfortably.
+
+
+---
+
+## Rollback Operations
+
+### Option 1: kubectl Rollback (Emergency — instant, 5 seconds)
+
+```bash
+# Rollback to previous version
+kubectl rollout undo deployment/order-service -n order-service
+
+# Verify
+kubectl rollout status deployment/order-service -n order-service
+
+# See history
+kubectl rollout history deployment/order-service -n order-service
+```
+
+⚠️ ArgoCD will re-sync from Git in ~3 minutes (overrides your rollback). To prevent:
+```bash
+# Pause auto-sync first
+kubectl -n argocd patch app order-service --type merge -p '{"spec":{"syncPolicy":null}}'
+
+# Rollback
+kubectl rollout undo deployment/order-service -n order-service
+
+# When ready to re-enable auto-sync:
+kubectl -n argocd patch app order-service --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+```
+
+---
+
+### Option 2: Git Revert (Recommended — clean audit trail)
+
+```bash
+# Revert the last commit (undoes the image tag update)
+git revert HEAD
+git push origin main
+
+# ArgoCD detects → syncs → deploys previous image
+```
+
+This is the GitOps-correct way — history shows who rolled back and when.
+
+---
+
+### Option 3: Manual Tag Change (rollback to specific version)
+
+```bash
+# Find available tags in ECR
+aws ecr describe-images --repository-name order-service \
+  --query "imageDetails[*].imageTags" --region us-east-1
+
+# Update to the older tag
+sed -i 's|tag:.*|tag: "OLDER_TAG_HERE"|' charts/microservice/values-order.yaml
+git add . && git commit -m "rollback: order-service to OLDER_TAG" && git push
+```
+
+ArgoCD syncs the older image.
+
+---
+
+### When to Use Which
+
+| Situation | Best Option | Time to Recover |
+|---|---|---|
+| Production is down NOW | Option 1 (kubectl) | 5 seconds |
+| Bad deploy, need proper rollback | Option 2 (git revert) | 1-3 minutes |
+| Need to go back 5 versions | Option 3 (manual tag) | 2-5 minutes |
+| Canary went wrong (if rollout enabled) | `kubectl argo rollouts abort` | Instant |
+
+---
+
+### Important: ArgoCD + Rollback Interaction
+
+With ArgoCD auto-sync enabled (`selfHeal: true`):
+- kubectl rollback works for ~3 minutes, then ArgoCD overrides it
+- Git revert is permanent — ArgoCD syncs to the reverted state
+- **Best practice:** Always use Git-based rollback unless it's a 2am emergency
