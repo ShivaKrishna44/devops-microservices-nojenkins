@@ -32,12 +32,11 @@
 **Q: How do you design highly available infrastructure on AWS?**
 
 > "Multi-AZ everything. EKS nodes across 2+ AZs, ALB with cross-zone balancing, RDS Multi-AZ for automatic failover. NAT Gateways in each AZ so private subnets have redundant internet access. All provisioned via Terraform so it's reproducible — if one AZ dies, workloads automatically shift to the surviving AZ."
+<img width="1408" height="768" alt="image_d9738eb" src="https://github.com/user-attachments/assets/dc9ebc4f-65c8-4470-a215-55f50a33eb36" />
 
 **Q: How do you manage Terraform at scale?**
 
 > "I use modular Terraform — separate files for VPC, EKS, ECR, IAM. Remote state in S3 with DynamoDB locking so teams don't conflict. Environment separation via tfvars (dev/prod). I pin provider versions and commit `.terraform.lock.hcl` to prevent drift. For drift detection, I run `terraform plan -refresh-only` on a schedule."
->
-> ![Uploading image_d9738eb.png…]()
 
 
 **Q: Tell me about a CI/CD pipeline you've built.**
