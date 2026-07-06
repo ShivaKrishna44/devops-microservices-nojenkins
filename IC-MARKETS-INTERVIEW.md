@@ -36,6 +36,9 @@
 **Q: How do you manage Terraform at scale?**
 
 > "I use modular Terraform — separate files for VPC, EKS, ECR, IAM. Remote state in S3 with DynamoDB locking so teams don't conflict. Environment separation via tfvars (dev/prod). I pin provider versions and commit `.terraform.lock.hcl` to prevent drift. For drift detection, I run `terraform plan -refresh-only` on a schedule."
+>
+> ![Uploading image_d9738eb.png…]()
+
 
 **Q: Tell me about a CI/CD pipeline you've built.**
 
