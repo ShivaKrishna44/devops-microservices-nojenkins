@@ -92,6 +92,7 @@ node_instance_type = "m5.large"
 
 > "I built a GitHub Actions pipeline that uses OIDC to authenticate to AWS — no stored credentials. It builds Docker images, pushes to ECR with commit SHA tags, then updates Helm values in Git. ArgoCD detects the change and auto-syncs to EKS. For the Jenkins version, I had a distributed agent model with EC2 agents connecting via WebSocket, running parallel build+test stages and SonarQube quality gates."
 
+CI/CD: Jenkins runs on EKS as a StatefulSet. The build agent is an EC2 instance that connects back to Jenkins via WebSocket. When a developer pushes code, Jenkins runs build and test stages in parallel, then runs a SonarQube scan with a quality gate. If it passes, it builds the Docker image and pushes it to ECR with a unique tag. ECR repos are set to immutable — you can't overwrite a tag once pushed.
 ---
 
 ### 2. Containerization & Orchestration
