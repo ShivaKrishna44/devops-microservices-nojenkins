@@ -39,6 +39,55 @@
 > "I use modular Terraform — separate files for VPC, EKS, ECR, IAM. Remote state in S3 with DynamoDB locking so teams don't conflict. Environment separation via tfvars (dev/prod). I pin provider versions and commit `.terraform.lock.hcl` to prevent drift. For drift detection, I run `terraform plan -refresh-only` on a schedule."
 
 
+# VPC Module Reference vpc.tf
+module "vpc" {
+  source      = "./modules/vpc"
+  environment = var.environment
+  vpc_cidr    = var.vpc_cidr
+  az_count    = var.az_count
+}
+# IAM Module Reference iam.tf
+module "iam" {
+  source      = "./modules/iam"
+  environment = var.environment
+}
+# ECR Module Reference ecr.tf
+module "ecr" {
+  source          = "./modules/ecr"
+  environment     = var.environment
+  repo_names      = ["frontend", "backend"]
+  iam_push_arn   = module.iam.ecr_push_role_arn
+}
+
+# EKS Module Reference eks.tf
+module "eks" {
+  source             = "./modules/eks"
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  node_instance_type = var.node_instance_type
+}
+
+# Remote State configuration with DynamoDB State Locking
+  backend "s3" {
+    bucket         = "your-company-terraform-state"
+    key            = "environments/terraform.tfstate" # Overridden in CI via -backend-config
+    region         = "us-east-1"
+    dynamodb_table = "terraform-lock-table"
+    encrypt        = true
+  }
+
+**Environment Input Files (.tfvars)hcl# environments/dev.tfvars**
+environment        = "dev"
+vpc_cidr           = "10.0.0.0/16"
+az_count           = 2
+node_instance_type = "t3.medium"
+Use code with caution.hcl# environments/prod.tfvars
+environment        = "prod"
+vpc_cidr           = "10.10.0.0/16"
+az_count           = 3
+node_instance_type = "m5.large"
+
 **Q: Tell me about a CI/CD pipeline you've built.**
 
 > "I built a GitHub Actions pipeline that uses OIDC to authenticate to AWS — no stored credentials. It builds Docker images, pushes to ECR with commit SHA tags, then updates Helm values in Git. ArgoCD detects the change and auto-syncs to EKS. For the Jenkins version, I had a distributed agent model with EC2 agents connecting via WebSocket, running parallel build+test stages and SonarQube quality gates."
