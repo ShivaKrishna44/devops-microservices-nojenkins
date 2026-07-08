@@ -1070,3 +1070,35 @@ With ArgoCD auto-sync enabled (`selfHeal: true`):
 - kubectl rollback works for ~3 minutes, then ArgoCD overrides it
 - Git revert is permanent — ArgoCD syncs to the reverted state
 - **Best practice:** Always use Git-based rollback unless it's a 2am emergency
+
+
+---
+
+## How Image Tags Get Updated Automatically
+
+The `values-<service>.yaml` files contain two fields:
+```yaml
+image:
+  repository: 589389425618.dkr.ecr.us-east-1.amazonaws.com/user-service   # ← Set once, never changes
+  tag: "c5009108bf4e"                                                       # ← Auto-updated by pipeline
+```
+
+**`repository`** — you set this manually once when creating the service. It always points to the ECR repo.
+
+**`tag`** — automatically updated by GitHub Actions on every successful build:
+
+```
+Developer pushes code to app/user-service/
+    ↓
+GitHub Actions triggers build-user job
+    ↓
+Builds Docker image → pushes to ECR with tag = commit SHA (first 12 chars)
+    ↓
+Pipeline runs: sed -i 's|tag:.*|tag: "NEW_SHA"|' charts/microservice/values-user.yaml
+    ↓
+Pipeline commits + pushes the updated values file to Git
+    ↓
+ArgoCD detects the tag change → deploys new image to EKS
+```
+
+**You never manually edit the `tag` field after first deploy.** The pipeline handles it on every code change.
