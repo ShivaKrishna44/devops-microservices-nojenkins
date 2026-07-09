@@ -370,3 +370,293 @@ Structure every answer as:
 ```
 
 This shows you've actually debugged these issues — not just read about them.
+
+
+---
+
+## Hands-On Lab Results (Tested on Live Cluster)
+
+### Q1 Lab: Pod Stuck in Pending — Simulated & Fixed
+
+**What I did:**
+```bash
+# Created a deployment requesting 16Gi RAM + 8 CPUs (way beyond t3.medium capacity)
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hungry-app
+  namespace: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hungry-app
+  template:
+    metadata:
+      labels:
+        app: hungry-app
+    spec:
+      containers:
+        - name: hungry-app
+          image: nginx:1.25-alpine
+          resources:
+            requests:
+              memory: "16Gi"
+              cpu: "8"
+EOF
+```
+
+**What happened:**
+```
+$ kubectl get pods -n order-service
+NAME                          READY   STATUS    AGE
+hungry-app-9696cbf97-h5vwb   0/1     Pending   2m
+```
+
+**Diagnosis:**
+```
+$ kubectl describe pod hungry-app-9696cbf97-h5vwb -n order-service
+
+Events:
+  Warning  FailedScheduling  87s  default-scheduler
+  0/2 nodes are available: 1 Too many pods, 2 Insufficient cpu, 2 Insufficient memory.
+  preemption: 0/2 nodes are available: 2 No preemption victims found for incoming pod.
+```
+
+**Fix:**
+```bash
+# Reduce resource requests to something the nodes can handle
+kubectl patch deployment hungry-app -n order-service --type='json' \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"128Mi"},
+       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"100m"}]'
+
+# Pod scheduled immediately → Running
+```
+
+**Interview takeaway:** Always check `kubectl describe pod` → Events section. The scheduler tells you exactly what's missing.
+
+---
+
+### Q4 Lab: Broken Image Tag — ImagePullBackOff
+
+**What I did:**
+```bash
+# Disable ArgoCD self-heal (so it doesn't auto-fix)
+kubectl -n argocd patch app order-service --type merge -p '{"spec":{"syncPolicy":null}}'
+
+# Deploy a non-existent image tag
+kubectl set image deployment/order-service \
+  order-service=589389425618.dkr.ecr.us-east-1.amazonaws.com/order-service:broken-v99 \
+  -n order-service
+```
+
+**What happened:**
+```
+$ kubectl get pods -n order-service
+NAME                             READY   STATUS             AGE
+order-service-5f894f7456-sthg7   1/1     Running            4h5m   ← OLD pod (still serving traffic)
+order-service-7ff674b478-ggsmh   0/1     ImagePullBackOff   2m     ← NEW pod (broken)
+```
+
+**Key observation:** Old pod stays Running — K8s rolling update won't kill it until the new pod is healthy. Users are NOT affected.
+
+**Diagnosis:**
+```
+$ kubectl describe pod order-service-7ff674b478-ggsmh -n order-service
+
+Events:
+  Warning  Failed   2m  kubelet  Failed to pull image
+  "589389425618.dkr.ecr.us-east-1.amazonaws.com/order-service:broken-v99"
+  rpc error: code = NotFound
+```
+
+**ArgoCD behavior:** Shows `OutOfSync` because cluster state differs from Git. Won't auto-fix because we disabled selfHeal.
+
+**Fix:**
+```bash
+# Rollback to previous working version
+kubectl rollout undo deployment/order-service -n order-service
+
+# Re-enable ArgoCD auto-sync
+kubectl -n argocd patch app order-service --type merge \
+  -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+```
+
+**Interview takeaway:** In a real scenario, check: `kubectl logs --previous` for app crashes, `kubectl describe pod` for image pull errors, and `git log` for recent commits that changed the image tag.
+
+---
+
+### Q14 Lab: Manual Scale → ArgoCD Self-Heal Reverts
+
+**What I did:**
+```bash
+# ArgoCD self-heal is ON (default)
+# Manually scale order-service from 1 to 5 replicas
+kubectl scale deployment/order-service --replicas=5 -n order-service
+```
+
+**What happened (within 30 seconds):**
+```
+$ kubectl get pods -n order-service -w
+order-service-5f894f7456-sthg7   1/1   Running       0   4h33m
+order-service-5f894f7456-6p2fs   0/1   Pending       0   1s     ← new
+order-service-5f894f7456-pzsrv   0/1   Pending       0   1s     ← new
+order-service-5f894f7456-tv497   0/1   Pending       0   1s     ← new
+order-service-5f894f7456-vbhfl   0/1   Pending       0   1s     ← new
+
+# 11 seconds later — ArgoCD detects drift and kills them:
+order-service-5f894f7456-tv497   1/1   Terminating   0   11s
+order-service-5f894f7456-6p2fs   1/1   Terminating   0   11s
+order-service-5f894f7456-pzsrv   1/1   Terminating   0   11s
+order-service-5f894f7456-vbhfl   1/1   Terminating   0   11s
+
+# Final state — back to 1 pod (what Git declares):
+order-service-5f894f7456-sthg7   1/1   Running       0   4h34m
+```
+
+**ArgoCD UI showed:** 3 ReplicaSets in history — original, broken image attempt, and the self-healed version.
+
+**Interview takeaway:**
+- With `selfHeal: true` → ArgoCD automatically reverts ANY manual cluster change within seconds
+- With `selfHeal: false` → ArgoCD shows OutOfSync but takes no action until manual sync
+- Git is ALWAYS the source of truth — manual kubectl changes are temporary
+
+
+---
+
+### Q2 Lab: Example Output — Debugging External Access (Traffic Path)
+
+**Traffic path:** `DNS → ALB → Target Group → Pod IP:Port`
+
+---
+
+**Step 1: DNS resolves?**
+```bash
+$ nslookup app.vosukula.online
+
+# ✅ GOOD (resolves to ALB):
+Server:   172.20.0.10
+Address:  172.20.0.10#53
+Name:     app.vosukula.online
+Address:  k8s-vosukulasharedalb-df21c7ac87-1270122347.us-east-1.elb.amazonaws.com
+
+# ❌ BAD (no DNS record):
+** server can't find app.vosukula.online: NXDOMAIN
+→ Fix: Add CNAME in Route53 pointing to ALB DNS name
+```
+
+---
+
+**Step 2: ALB targets healthy?**
+```bash
+$ aws elbv2 describe-target-health --target-group-arn arn:aws:elasticloadbalancing:us-east-1:589389425618:targetgroup/k8s-order-abc123/def456
+
+# ✅ GOOD:
+{
+  "TargetHealthDescriptions": [
+    {
+      "Target": { "Id": "10.0.12.203", "Port": 5000 },
+      "HealthCheckPort": "5000",
+      "TargetHealth": { "State": "healthy" }
+    }
+  ]
+}
+
+# ❌ BAD (unhealthy):
+{
+  "TargetHealthDescriptions": [
+    {
+      "Target": { "Id": "10.0.12.203", "Port": 5000 },
+      "TargetHealth": {
+        "State": "unhealthy",
+        "Reason": "Target.ResponseCodeMismatch",
+        "Description": "Health checks failed with these codes: [404]"
+      }
+    }
+  ]
+}
+→ Fix: Health check path returns 404. Change healthcheck-path annotation to match app route (/)
+```
+
+---
+
+**Step 3: Ingress rules correct?**
+```bash
+$ kubectl describe ingress order-ingress -n order-service
+
+# ✅ GOOD:
+Rules:
+  Host                    Path  Backends
+  ----                    ----  --------
+  app.vosukula.online
+                          /order   order-service:5000 (10.0.12.203:5000)
+
+# ❌ BAD (backend not found):
+Rules:
+  Host                    Path  Backends
+  ----                    ----  --------
+  app.vosukula.online
+                          /order   order-service:5000 (<error: services "order-service" not found>)
+→ Fix: Service doesn't exist in this namespace. Check namespace or service name.
+```
+
+---
+
+**Step 4: Service has endpoints?**
+```bash
+$ kubectl get endpoints order-service -n order-service
+
+# ✅ GOOD (has pod IPs):
+NAME            ENDPOINTS          AGE
+order-service   10.0.12.203:5000   4h
+
+# ❌ BAD (empty — no pods match selector):
+NAME            ENDPOINTS   AGE
+order-service   <none>      4h
+→ Fix: Service selector labels don't match pod labels.
+       Check: kubectl get svc order-service -o yaml | grep selector
+       vs:    kubectl get pods --show-labels
+```
+
+---
+
+**Quick reference — where traffic breaks:**
+```
+Step 1 fails → DNS not configured (Route53)
+Step 2 fails → ALB can't reach pods (Security Group or health check)
+Step 3 fails → Ingress misconfigured (wrong path, service name, namespace)
+Step 4 fails → Service selector doesn't match pods (label mismatch)
+```
+
+
+---
+
+### Q19: EKS Cluster Version Upgrade — Zero Downtime (Blue-Green Nodes)
+
+**Steps:**
+
+```
+Step 1: Upgrade control plane (Terraform — AWS handles it, no downtime)
+        cluster_version = "1.34"  → terraform apply
+
+Step 2: Create NEW node group (v1.34) alongside OLD (v1.33)
+        Now: 2 old nodes + 2 new nodes running together
+
+Step 3: Drain old nodes (pods move to new nodes gracefully)
+        kubectl cordon <old-node>
+        kubectl drain <old-node> --delete-emptydir-data --ignore-daemonsets
+
+Step 4: Delete old node group (Terraform — remove old from config)
+        terraform apply
+```
+
+**Why zero downtime:**
+- Pods move one at a time (rolling eviction)
+- ALB routes to wherever healthy pods are
+- New pods start on new nodes before old pods terminate
+- PDBs (Pod Disruption Budgets) control eviction pace
+
+**Interview Answer:**
+
+> "I never upgrade nodes in-place. I use Blue-Green node groups: create new nodes with the target version, drain old nodes so pods reschedule, then delete old nodes. The control plane upgrade is handled by AWS automatically with no downtime. The key is `kubectl drain` which respects Pod Disruption Budgets — it evicts pods one at a time, waits for them to be healthy on new nodes before evicting the next. Users never see an outage."
